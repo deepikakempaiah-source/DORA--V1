@@ -3,6 +3,7 @@ import express from "express";
 import { orchestrateDeepResearch } from "./orchestrator.js";
 import { generateResearchDiagram } from "./diagramGenerator.js";
 import { answerResearchFollowUp } from "./qaAssistant.js";
+import { withPersonalGeminiApiKey } from "./geminiClient.js";
 import { ResearchRequestPayload, ResearchResult, QaMessage } from "../src/types.js";
 
 // Keep a delivery margin below the configured Vercel function duration (300s).
@@ -26,6 +27,16 @@ function errorMessage(err: unknown): string {
   } catch {
     return "An unexpected error occurred.";
   }
+}
+
+/** Read an optional per-request fallback key without ever adding it to logs. */
+function personalApiKeyFromRequest(req: express.Request): string | undefined {
+  const value = req.get("X-DORA-Gemini-Key")?.trim();
+  if (!value) return undefined;
+  if (value.length < 20 || value.length > 256) {
+    throw new Error("The personal Gemini API key format is invalid.");
+  }
+  return value;
 }
 
 export function createExpressApp() {
@@ -62,7 +73,10 @@ export function createExpressApp() {
         payload.query = "Analyze and synthesize findings from uploaded document(s)";
       }
 
-      const result = await orchestrateDeepResearch(payload);
+      const result = await withPersonalGeminiApiKey(
+        personalApiKeyFromRequest(req),
+        () => orchestrateDeepResearch(payload)
+      );
       return res.json(result);
     } catch (err: unknown) {
       console.error("Research error:", err);
@@ -154,9 +168,12 @@ export function createExpressApp() {
     });
 
     try {
-      const result = await orchestrateDeepResearch(payload, (step) => {
-        sendEvent("progress", step);
-      });
+      const result = await withPersonalGeminiApiKey(
+        personalApiKeyFromRequest(req),
+        () => orchestrateDeepResearch(payload, (step) => {
+          sendEvent("progress", step);
+        })
+      );
 
       clearTimeout(timeoutHandle);
       console.log(`[SSE] Successfully completed research for: "${queryPreview}". Dispatching result and done events.`);
@@ -182,7 +199,10 @@ export function createExpressApp() {
         return res.status(400).json({ error: "Missing or invalid research payload." });
       }
 
-      const diagram = await generateResearchDiagram(research);
+      const diagram = await withPersonalGeminiApiKey(
+        personalApiKeyFromRequest(req),
+        () => generateResearchDiagram(research)
+      );
       return res.json(diagram);
     } catch (err: unknown) {
       console.error("Diagram generation error:", err);
@@ -205,11 +225,14 @@ export function createExpressApp() {
         return res.status(400).json({ error: "Missing research context or question." });
       }
 
-      const answer = await answerResearchFollowUp({
-        research,
-        question: question.trim(),
-        history: Array.isArray(history) ? history : [],
-      });
+      const answer = await withPersonalGeminiApiKey(
+        personalApiKeyFromRequest(req),
+        () => answerResearchFollowUp({
+          research,
+          question: question.trim(),
+          history: Array.isArray(history) ? history : [],
+        })
+      );
 
       return res.json({ answer });
     } catch (err: unknown) {

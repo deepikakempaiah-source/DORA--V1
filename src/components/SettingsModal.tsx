@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Settings, X, Moon, Sun, Shield, Trash2, Cpu, Check, AlertCircle } from "lucide-react";
+import { Settings, X, Moon, Sun, Shield, Trash2, Cpu, Check, AlertCircle, KeyRound } from "lucide-react";
 import { useTheme } from "../context/ThemeContext.js";
 import { useAuth } from "../context/AuthContext.js";
 
@@ -8,18 +8,35 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onClearHistory: () => void;
+  hasPersonalApiKey: boolean;
+  onPersonalApiKeyChange: (apiKey: string | null) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   onClearHistory,
+  hasPersonalApiKey,
+  onPersonalApiKeyChange,
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
   const [defaultMode, setDefaultMode] = useState<"fast" | "deep" | "academic">("deep");
   const [autoDiagrams, setAutoDiagrams] = useState(true);
   const [clearConfirmed, setClearConfirmed] = useState(false);
+  const [personalApiKey, setPersonalApiKey] = useState("");
+  const [keyMessage, setKeyMessage] = useState<string | null>(null);
+
+  const savePersonalApiKey = () => {
+    const value = personalApiKey.trim();
+    if (value.length < 20 || value.length > 256) {
+      setKeyMessage("Enter a valid Gemini API key.");
+      return;
+    }
+    onPersonalApiKeyChange(value);
+    setPersonalApiKey("");
+    setKeyMessage("Personal fallback key enabled for this session.");
+  };
 
   return (
     <AnimatePresence>
@@ -165,6 +182,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="text-[11px] text-neutral-500">
                   All queries and research extractions are streamed through isolated sandbox channels.
                 </p>
+              </div>
+
+              {/* Personal Gemini quota fallback */}
+              <div
+                className={`p-3.5 rounded-lg border flex flex-col gap-2.5 transition-colors ${
+                  isDark ? "bg-[#18181b] border-neutral-800/80" : "bg-neutral-50 border-neutral-200"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className={`text-xs font-semibold ${isDark ? "text-neutral-200" : "text-neutral-800"}`}>
+                      Personal Gemini API Key
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-mono ${hasPersonalApiKey ? "text-emerald-400" : "text-neutral-500"}`}>
+                    {hasPersonalApiKey ? "SESSION FALLBACK READY" : "OPTIONAL"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  DORA uses its own key first. Your key is used only if DORA&apos;s Gemini quota is exhausted, and is held only in this browser tab for the current session.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="password"
+                    value={personalApiKey}
+                    onChange={(event) => { setPersonalApiKey(event.target.value); setKeyMessage(null); }}
+                    placeholder={hasPersonalApiKey ? "Replace personal key" : "Paste Gemini API key"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={`min-w-0 flex-1 rounded-md border px-2.5 py-2 text-xs font-mono outline-none ${
+                      isDark ? "bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-500" : "bg-white border-neutral-300 text-neutral-900 placeholder:text-neutral-400"
+                    }`}
+                  />
+                  <button type="button" onClick={savePersonalApiKey} className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 cursor-pointer">
+                    Save for session
+                  </button>
+                  {hasPersonalApiKey && (
+                    <button type="button" onClick={() => { onPersonalApiKeyChange(null); setPersonalApiKey(""); setKeyMessage("Personal fallback key removed."); }} className={`rounded-md border px-3 py-2 text-xs font-medium cursor-pointer ${isDark ? "border-neutral-700 text-neutral-300 hover:bg-neutral-800" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {keyMessage && <p className={`flex items-center gap-1.5 text-[11px] ${keyMessage.includes("valid") ? "text-red-400" : "text-emerald-400"}`}><AlertCircle className="w-3 h-3" />{keyMessage}</p>}
               </div>
 
               {/* Clear History / Cache Data */}

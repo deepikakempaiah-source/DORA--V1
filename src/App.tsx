@@ -64,6 +64,8 @@ function AppContent() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [qaMessages, setQaMessages] = useState<QaMessage[]>([]);
   const [currentDiagram, setCurrentDiagram] = useState<DiagramResult | undefined>(undefined);
+  // Never persist a personal key: it remains only in this page's memory.
+  const [personalGeminiApiKey, setPersonalGeminiApiKey] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -129,7 +131,10 @@ function AppContent() {
       // Use SSE streaming endpoint for real-time progress
       const response = await fetch("/api/research/stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(personalGeminiApiKey ? { "X-DORA-Gemini-Key": personalGeminiApiKey } : {}),
+        },
         body: JSON.stringify(payload),
         signal: abortControllerRef.current.signal,
       });
@@ -593,6 +598,7 @@ function AppContent() {
                     onAddQaMessage={handleAddQaMessage}
                     diagram={currentDiagram}
                     onDiagramGenerated={handleDiagramGenerated}
+                    personalGeminiApiKey={personalGeminiApiKey || undefined}
                   />
                 </motion.div>
               )}
@@ -700,6 +706,8 @@ function AppContent() {
             isOpen={isSettingsOpen}
             onClose={() => setIsSettingsOpen(false)}
             onClearHistory={handleClearAllHistory}
+            hasPersonalApiKey={Boolean(personalGeminiApiKey)}
+            onPersonalApiKeyChange={setPersonalGeminiApiKey}
           />
 
           {/* Minimal Functional Footer */}

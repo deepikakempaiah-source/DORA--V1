@@ -11,6 +11,7 @@ import {
   generateContentWithRetry,
   isRetryable,
   setGeminiClientForTesting,
+  withPersonalGeminiApiKey,
 } from "../server/geminiClient.js";
 import type { GoogleGenAI } from "@google/genai";
 import type { ResearchResult } from "../src/types.js";
@@ -157,6 +158,21 @@ test("a temporary Gemini 503 is retried", async () => {
   assert.equal(response.text, "Recovered");
   assert.equal(calls, 2);
   assert.equal(isRetryable(new Error("503 unavailable")), true);
+});
+
+test("a personal key is used only after DORA quota exhaustion", async () => {
+  let calls = 0;
+  setGeminiClientForTesting(fakeClient(() => {
+    calls += 1;
+    if (calls === 1) throw new Error("resource_exhausted: daily quota exceeded");
+    return { text: "Fallback succeeded." };
+  }));
+  const result = await withPersonalGeminiApiKey(
+    "AIza-personal-key-for-test-only",
+    () => generateContentWithRetry({ contents: "test", timeoutMs: 500 }, 0)
+  );
+  assert.equal(result.text, "Fallback succeeded.");
+  assert.equal(calls, 2);
 });
 
 test("a persistent model failure is surfaced rather than fabricated", async () => {

@@ -1,18 +1,37 @@
 import { GoogleGenAI } from "@google/genai";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 let genAIClient: GoogleGenAI | null = null;
+let testGeminiClient: GoogleGenAI | null = null;
+interface PersonalKeyContext { apiKey: string; usePersonalKey: boolean; }
+const personalApiKeyContext = new AsyncLocalStorage<PersonalKeyContext | undefined>();
+
+/**
+ * Run a request with a user-supplied key that is isolated to that request.
+ * The key is never cached, logged, or persisted by DORA.
+ */
+export function withPersonalGeminiApiKey<T>(apiKey: string | undefined, operation: () => Promise<T>): Promise<T> {
+  return personalApiKeyContext.run(apiKey ? { apiKey, usePersonalKey: false } : undefined, operation);
+}
 
 /** Test-only seam. Production code always creates the client from GEMINI_API_KEY. */
 export function setGeminiClientForTesting(client: GoogleGenAI | null): void {
-  genAIClient = client;
+  testGeminiClient = client;
 }
 
-export function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+export function getGeminiClient(apiKey = process.env.GEMINI_API_KEY): GoogleGenAI {
   if (!apiKey) {
     throw new Error(
       "GEMINI_API_KEY environment variable is not configured. Please set it in your Vercel project settings."
     );
+  }
+
+  if (testGeminiClient) return testGeminiClient;
+
+  // Personal keys must stay request-scoped. Caching one here could leak it into
+  // another user's request in a long-lived serverless process.
+  if (apiKey !== process.env.GEMINI_API_KEY) {
+    return new GoogleGenAI({ apiKey });
   }
 
   if (!genAIClient) {
@@ -105,7 +124,7 @@ export async function generateContentWithRetry(
   params: GenerateParams,
   maxRetries = 1
 ) {
-  const ai = getGeminiClient();
+  const runWithClient = async (ai: GoogleGenAI) => {
   const primary = params.preferredModel || PRIMARY_MODEL;
   const perCallTimeout = params.timeoutMs || 15_000;
   let lastErr: unknown;
@@ -138,4 +157,23 @@ export async function generateContentWithRetry(
     if (["invalid_credential", "permission", "quota_exhausted", "payload_too_large", "invalid_request"].includes(classifyGeminiError(lastErr))) break;
   }
   throw lastErr;
+  };
+
+  const keyContext = personalApiKeyContext.getStore();
+  if (keyContext?.usePersonalKey) {
+    return runWithClient(getGeminiClient(keyContext.apiKey));
+  }
+
+  try {
+    return await runWithClient(getGeminiClient());
+  } catch (err) {
+    if (!keyContext || classifyGeminiError(err) !== "quota_exhausted") throw err;
+
+    // Only change providers after DORA's configured project has exhausted its
+    // quota. Future calls in this request also use that key, avoiding repeated
+    // doomed requests against an exhausted DORA quota.
+    keyContext.usePersonalKey = true;
+    console.info("[GeminiClient] DORA quota exhausted; retrying with the request's personal key.");
+    return runWithClient(getGeminiClient(keyContext.apiKey));
+  }
 }

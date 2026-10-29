@@ -18,12 +18,14 @@ interface ResearchDiagramViewerProps {
   research: ResearchResult;
   initialDiagram?: DiagramResult;
   onDiagramGenerated?: (diagram: DiagramResult) => void;
+  personalGeminiApiKey?: string;
 }
 
 export const ResearchDiagramViewer: React.FC<ResearchDiagramViewerProps> = ({
   research,
   initialDiagram,
   onDiagramGenerated,
+  personalGeminiApiKey,
 }) => {
   const { isDark } = useTheme();
   const [diagram, setDiagram] = useState<DiagramResult | null>(initialDiagram || null);
@@ -119,7 +121,10 @@ export const ResearchDiagramViewer: React.FC<ResearchDiagramViewerProps> = ({
     try {
       const res = await fetch("/api/research/diagram", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(personalGeminiApiKey ? { "X-DORA-Gemini-Key": personalGeminiApiKey } : {}),
+        },
         body: JSON.stringify({ research }),
       });
 

@@ -10,6 +10,7 @@ interface FollowUpQaProps {
   research: ResearchResult;
   messages: QaMessage[];
   onAddMessage: (msg: QaMessage) => void;
+  personalGeminiApiKey?: string;
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -23,6 +24,7 @@ export const FollowUpQa: React.FC<FollowUpQaProps> = ({
   research,
   messages,
   onAddMessage,
+  personalGeminiApiKey,
 }) => {
   const { isDark } = useTheme();
   const [question, setQuestion] = useState("");
@@ -48,7 +50,10 @@ export const FollowUpQa: React.FC<FollowUpQaProps> = ({
     try {
       const response = await fetch("/api/research/qa", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(personalGeminiApiKey ? { "X-DORA-Gemini-Key": personalGeminiApiKey } : {}),
+        },
         body: JSON.stringify({
           research,
           question: finalQuestion,

@@ -37,6 +37,7 @@ interface ResearchViewerProps {
   onAddQaMessage: (msg: QaMessage) => void;
   diagram?: DiagramResult;
   onDiagramGenerated: (diagram: DiagramResult) => void;
+  personalGeminiApiKey?: string;
 }
 
 export const ResearchViewer: React.FC<ResearchViewerProps> = ({
@@ -46,6 +47,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({
   onAddQaMessage,
   diagram,
   onDiagramGenerated,
+  personalGeminiApiKey,
 }) => {
   const { isDark } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -1106,6 +1108,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({
         research={result}
         initialDiagram={diagram}
         onDiagramGenerated={onDiagramGenerated}
+        personalGeminiApiKey={personalGeminiApiKey}
       />
 
       {/* Follow-up Questions & Deep Dive Q&A */}
@@ -1113,6 +1116,7 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({
         research={result}
         messages={qaMessages}
         onAddMessage={onAddQaMessage}
+        personalGeminiApiKey={personalGeminiApiKey}
       />
     </div>
   );
