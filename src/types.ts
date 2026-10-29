@@ -134,8 +134,10 @@ export interface ProgressStep {
 export interface UploadedFile {
   name: string;
   mimeType: string;
-  data: string; // base64 string
   size: number;
+  /** Text extracted in the browser. Raw PDF bytes are intentionally never sent to Vercel. */
+  text?: string;
+  pageCount?: number;
 }
 
 export interface ResearchRequestPayload {

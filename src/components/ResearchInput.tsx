@@ -4,6 +4,7 @@ import { Upload, FileText, X, ArrowUp, Zap, Compass, GraduationCap } from "lucid
 import { ResearchMode, UploadedFile } from "../types.js";
 import MovingBorder from "./MovingBorder.js";
 import { useTheme } from "../context/ThemeContext.js";
+import { extractPdfText } from "../lib/pdfText.js";
 
 interface ResearchInputProps {
   onSearch: (
@@ -21,6 +22,8 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
   const [userExplicitlyChangedMode, setUserExplicitlyChangedMode] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [preparingFiles, setPreparingFiles] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sampleQueries = [
@@ -76,7 +79,7 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
     }
   }, [recommendedMode, userExplicitlyChangedMode, query]);
 
-  const handleFilesChosen = (files: FileList | null) => {
+  const handleFilesChosen = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     const newFiles: File[] = Array.from(files).filter(
@@ -88,28 +91,15 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
       return;
     }
 
-    // Process each PDF into base64
-    newFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const resultStr = reader.result as string;
-        const base64Data = resultStr.includes(",") ? resultStr.split(",")[1] : resultStr;
-        setAttachedFiles((prev) => {
-          // Avoid duplicate files by name
-          if (prev.some((p) => p.name === file.name)) return prev;
-          return [
-            ...prev,
-            {
-              name: file.name,
-              mimeType: file.type || "application/pdf",
-              data: base64Data,
-              size: file.size,
-            },
-          ];
-        });
-      };
-      reader.readAsDataURL(file);
-    });
+    setPreparingFiles(true); setFileError(null);
+    try {
+      const extracted = await Promise.all(newFiles.map(async (file) => ({
+        name: file.name, mimeType: file.type || "application/pdf", size: file.size,
+        ...(await extractPdfText(file)),
+      })));
+      setAttachedFiles((prev) => [...prev, ...extracted.filter((f) => !prev.some((p) => p.name === f.name))]);
+    } catch (err) { setFileError(err instanceof Error ? err.message : "Could not read this PDF."); }
+    finally { setPreparingFiles(false); }
 
     // If PDF is attached, auto-recommend academic or deep if user hasn't overridden
     if (!userExplicitlyChangedMode) {
@@ -132,7 +122,7 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = query.trim();
-    if (!trimmed && attachedFiles.length === 0) return;
+    if (preparingFiles || !trimmed && attachedFiles.length === 0) return;
 
     const effectiveQuery =
       trimmed ||
@@ -352,6 +342,7 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
               </motion.div>
             )}
           </AnimatePresence>
+          {fileError && <p className="mb-2 text-xs text-red-400">{fileError}</p>}
 
           {/* Query Input */}
           <div className="relative">
@@ -406,7 +397,7 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={isLoading || preparingFiles}
                 className="inline-flex items-center gap-1.5 text-xs rounded-md px-3 py-2 sm:py-1.5 transition-colors shadow-sm disabled:opacity-50 cursor-pointer text-neutral-200 hover:text-white bg-[#27272a] hover:bg-[#323238] border border-neutral-600 hover:border-neutral-500"
               >
                 <Upload className="w-3.5 h-3.5 text-neutral-300" />
@@ -423,15 +414,15 @@ export const ResearchInput: React.FC<ResearchInputProps> = ({ onSearch, isLoadin
               type="submit"
               whileHover={!isLoading && (query.trim() || attachedFiles.length > 0) ? { scale: 1.02 } : {}}
               whileTap={!isLoading && (query.trim() || attachedFiles.length > 0) ? { scale: 0.98 } : {}}
-              disabled={isLoading || (!query.trim() && attachedFiles.length === 0)}
+              disabled={isLoading || preparingFiles || (!query.trim() && attachedFiles.length === 0)}
               className={`inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-4 py-2.5 sm:py-2 rounded-md transition-all shadow-md cursor-pointer disabled:cursor-not-allowed w-full sm:w-auto ${
                 query.trim() || attachedFiles.length > 0
                   ? "bg-neutral-100 hover:bg-white text-black ring-1 ring-white/60 shadow-md shadow-black/40"
                   : "bg-[#27272a] text-neutral-400 border border-neutral-600/80 hover:bg-[#323238] hover:text-neutral-300"
               }`}
             >
-              {isLoading ? (
-                <span>Orchestrating...</span>
+              {isLoading || preparingFiles ? (
+                <span>{preparingFiles ? "Reading PDF..." : "Orchestrating..."}</span>
               ) : (
                 <>
                   <span className="capitalize">{selectedMode} Research</span>

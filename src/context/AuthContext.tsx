@@ -11,6 +11,11 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, githubProvider } from "../lib/firebase.js";
 
+function requireAuth() {
+  if (!auth) throw new Error("Firebase is not configured locally. Add the VITE_FIREBASE_* values to a .env file and restart the server.");
+  return auth;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -58,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Listen to Firebase auth state changes
   useEffect(() => {
+    if (!auth) { setIsLoading(false); return; }
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser(mapFirebaseUser(firebaseUser));
@@ -73,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     setIsLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(requireAuth(), googleProvider);
       setUser(mapFirebaseUser(result.user, "google"));
     } finally {
       setIsLoading(false);
@@ -83,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGithub = async () => {
     setIsLoading(true);
     try {
-      const result = await signInWithPopup(auth, githubProvider);
+      const result = await signInWithPopup(requireAuth(), githubProvider);
       setUser(mapFirebaseUser(result.user, "github"));
     } finally {
       setIsLoading(false);
@@ -93,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithEmail = async (email: string, password: string, _name?: string) => {
     setIsLoading(true);
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
+      const result = await signInWithEmailAndPassword(requireAuth(), email, password);
       setUser(mapFirebaseUser(result.user, "email"));
     } finally {
       setIsLoading(false);
@@ -103,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const registerWithEmail = async (email: string, password: string, name: string) => {
     setIsLoading(true);
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
+      const result = await createUserWithEmailAndPassword(requireAuth(), email, password);
       // Update display name
       await updateProfile(result.user, { displayName: name });
       setUser(mapFirebaseUser(result.user, "email"));
@@ -113,11 +119,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(requireAuth(), email);
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await signOut(requireAuth());
     setUser(null);
   };
 

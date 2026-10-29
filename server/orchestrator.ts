@@ -121,8 +121,8 @@ export async function orchestrateDeepResearch(
   // Gather uploaded files (supporting single file or files array)
   const uploadedFiles: UploadedFile[] = [];
   if (payload.files && Array.isArray(payload.files)) {
-    uploadedFiles.push(...payload.files.filter((f) => f && f.data));
-  } else if (payload.file && payload.file.data) {
+    uploadedFiles.push(...payload.files.filter((f) => f && typeof f.text === "string"));
+  } else if (payload.file && typeof payload.file.text === "string") {
     uploadedFiles.push(payload.file);
   }
 
@@ -364,20 +364,13 @@ export async function orchestrateDeepResearch(
       "Report Synthesis"
     );
   } catch (synthErr) {
-    console.warn("[Orchestrator] Synthesis timed out or errored, using structured fallback:", synthErr);
+    console.warn("[Orchestrator] Synthesis timed out or errored; returning an explicitly partial result:", synthErr);
     synthesisResult = {
       sections: [
         {
-          id: "sec-1",
-          title: mode === "quick" ? "Direct Answer & Key Mechanism" : "Executive Overview",
-          content: `### Research Findings for "${query}"\n\n${retrievalResult.summaryOfFindings}`,
-        },
-        {
-          id: "sec-2",
-          title: mode === "quick" ? "Verified Evidence & Takeaways" : "Detailed Analysis & Evidence",
-          content: hasPdf && pdfResult?.extractedFindings
-            ? `**Document Evidence (${pdfNames.join(", ")}):**\n\n${pdfResult.extractedFindings.slice(0, 1200)}`
-            : "No verified external or document evidence was available for this request. The answer is limited to the model-generated overview above.",
+          id: "sec-partial",
+          title: "Research could not be fully synthesized",
+          content: "The evidence collection stage completed, but report synthesis failed. No completed evidence-based report is being shown. Please retry; if this persists, use a narrower question or Quick mode.",
         },
       ],
       relatedQuestions: [

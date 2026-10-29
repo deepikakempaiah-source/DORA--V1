@@ -29,6 +29,7 @@ import CursorRingField from "./components/originkit/ui/cursor-ring-field.js";
 import BlurText from "./components/BlurText.js";
 import TargetCursor from "./components/TargetCursor.js";
 import ClickSpark from "./components/ClickSpark.js";
+import { firebaseConfigured } from "./lib/firebase.js";
 
 const STORAGE_KEY = "dora_research_history_v1";
 
@@ -718,6 +719,9 @@ function AppContent() {
 }
 
 export default function App() {
+  if (!firebaseConfigured) {
+    return <main className="min-h-screen grid place-items-center bg-black p-6 text-neutral-100"><div className="max-w-lg rounded-lg border border-neutral-800 bg-neutral-950 p-6 font-mono text-sm"><h1 className="mb-3 text-lg font-bold">DORA needs local Firebase configuration</h1><p className="text-neutral-400">Copy <code>.env.example</code> to <code>.env</code>, add the required <code>VITE_FIREBASE_*</code> values from your Firebase project, then restart <code>npm run dev</code>.</p></div></main>;
+  }
   return (
     <ThemeProvider>
       <AuthProvider>

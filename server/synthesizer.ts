@@ -211,18 +211,7 @@ Please synthesize the research answer conforming strictly to the JSON schema.`;
     };
   } catch (err) {
     console.error("Error in synthesizeResearchAnswer:", err);
-    return {
-      sections: [
-        {
-          id: "sec-1",
-          title: "Research Synthesis",
-          content: `Synthesis encountered an issue: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        },
-      ],
-      relatedQuestions: [],
-    };
+    throw err;
   }
 }
 

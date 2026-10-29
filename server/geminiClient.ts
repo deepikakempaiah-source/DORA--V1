@@ -29,22 +29,26 @@ export const ADVANCED_MODEL = "gemini-3.5-flash";        // higher capability, v
 // fail merely because an alias changes or is unavailable for the project.
 export const BACKUP_MODEL = "gemini-3.5-flash-lite";
 
+export type GeminiErrorKind = "rate_limit" | "quota_exhausted" | "invalid_credential" | "permission" | "model_unavailable" | "overloaded" | "network" | "timeout" | "payload_too_large" | "invalid_request" | "unknown";
+export function classifyGeminiError(err: unknown): GeminiErrorKind {
+  const status = Number((err as any)?.status || (err as any)?.code || 0);
+  const message = String((err as any)?.message ?? err).toLowerCase();
+  if (status === 413 || /payload.{0,20}(too large|size)|request entity too large/.test(message)) return "payload_too_large";
+  if (status === 401 || /api key.{0,40}(invalid|not valid)|invalid credential/.test(message)) return "invalid_credential";
+  if (status === 403 || /permission denied|not authorized/.test(message)) return "permission";
+  if (/daily.{0,30}quota|quota.{0,30}(exhausted|exceeded)|resource_exhausted/.test(message)) return "quota_exhausted";
+  if (status === 429 || /rate limit|too many requests/.test(message)) return "rate_limit";
+  if (status === 404 || /model.{0,30}(not found|unsupported|unavailable)/.test(message)) return "model_unavailable";
+  if (status === 503 || /\b503\b|overload|high demand|service unavailable/.test(message)) return "overloaded";
+  if (/timeout|timed out/.test(message)) return "timeout";
+  if (/econnreset|socket hang up|network|fetch failed/.test(message)) return "network";
+  if (status === 400 || /invalid request|malformed/.test(message)) return "invalid_request";
+  return "unknown";
+}
+
 /** Returns true for transient errors that are safe to retry on the same model */
 export function isRetryable(err: unknown): boolean {
-  const msg = String((err as any)?.message ?? err).toLowerCase();
-  return (
-    msg.includes("503") ||
-    msg.includes("unavailable") ||
-    msg.includes("high demand") ||
-    msg.includes("overloaded") ||
-    msg.includes("429") ||
-    msg.includes("resource_exhausted") ||
-    msg.includes("quota") ||
-    msg.includes("rate limit") ||
-    msg.includes("timeout") ||
-    msg.includes("econnreset") ||
-    msg.includes("socket hang up")
-  );
+  return ["rate_limit", "overloaded", "network", "timeout"].includes(classifyGeminiError(err));
 }
 
 /** Sleep for `ms` milliseconds */
@@ -123,12 +127,15 @@ export async function generateContentWithRetry(
           `Gemini ${modelIndex ? "fallback " : ""}generateContent (${model})`);
       } catch (err: unknown) {
         lastErr = err;
+        const kind = classifyGeminiError(err);
         const msg = String((err as any)?.message ?? err);
         console.warn(`[GeminiClient] ${model} attempt ${attempt + 1}/${attempts} failed: ${msg.slice(0, 160)}`);
         if (!isRetryable(err) || attempt === attempts - 1) break;
         await sleep(backoffMs(attempt));
       }
     }
+    // Credentials, project quota and malformed input cannot be solved by a model switch.
+    if (["invalid_credential", "permission", "quota_exhausted", "payload_too_large", "invalid_request"].includes(classifyGeminiError(lastErr))) break;
   }
   throw lastErr;
 }

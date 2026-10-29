@@ -16,9 +16,10 @@ const firebaseConfig = {
 };
 
 // Prevent duplicate Firebase app initialization in HMR dev environments
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export const firebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId);
+const app = firebaseConfigured ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]) : undefined;
 
-export const auth = getAuth(app);
+export const auth = app ? getAuth(app) : null;
 export const googleProvider = new GoogleAuthProvider();
 export const githubProvider = new GithubAuthProvider();
 

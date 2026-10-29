@@ -26,14 +26,13 @@ export async function processPdfDocuments(
   const invalidFileNotices: string[] = [];
 
   for (const file of files) {
-    if (!file.data || typeof file.data !== "string" || file.data.trim().length < 50) {
-      invalidFileNotices.push(`"${file.name}": Document appears to be empty or corrupted (no readable data stream).`);
+    if (!file.text || typeof file.text !== "string" || file.text.trim().length < 10) {
+      invalidFileNotices.push(`"${file.name}": No readable text was supplied. The PDF may be scanned, corrupted, or unsupported.`);
       continue;
     }
 
-    // 25MB base64 size threshold
-    if (file.size > 25 * 1024 * 1024 || file.data.length > 35 * 1024 * 1024) {
-      invalidFileNotices.push(`"${file.name}": File size exceeds the 25MB supported document limit. Please use a compressed version.`);
+    if (file.size > 12 * 1024 * 1024 || file.text.length > 180_000) {
+      invalidFileNotices.push(`"${file.name}": Document exceeds the supported processing limit.`);
       continue;
     }
 
@@ -76,25 +75,12 @@ OBJECTIVES:
 ]
 REFERENCES_JSON>>>`;
 
-  const parts: any[] = [];
-
-  for (const file of validFiles) {
-    parts.push({
-      inlineData: {
-        mimeType: file.mimeType || "application/pdf",
-        data: file.data,
-      },
-    });
-  }
-
-  parts.push({
-    text: `Documents Analyzed: ${fileNames.join(", ")}
+  const parts: any[] = [{ text: `Documents Analyzed: ${fileNames.join(", ")}
 Research Inquiry: "${query}"
 
 ${isResumeTask
   ? "This is a resume-refinement request. Extract only facts actually present: contact fields, roles, employers, dates, education, skills, achievements, and missing information. Preserve factual content exactly; do not invent target roles, metrics, credentials, or experience. Return an actionable ATS-friendly rewrite plan and highlight gaps that need user input."
-  : "Please extract structured findings, cite exact page numbers, explain core terminology, and note any empirical discoveries or cross-document comparisons."}`,
-  });
+  : "Please extract structured findings, cite exact page numbers, explain core terminology, and note any empirical discoveries or cross-document comparisons."}\n\n${validFiles.map((file) => `DOCUMENT: ${file.name}\n${file.text}`).join("\n\n")}` }];
 
   try {
     const response = await generateContentWithRetry({

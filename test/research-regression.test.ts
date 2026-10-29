@@ -59,21 +59,21 @@ test("programming, deep, academic, and comparative queries remain routable", asy
 });
 
 test("a PDF with no extractable data returns an honest notice", async () => {
-  const pdf = await processPdfDocuments([{ name: "empty.pdf", mimeType: "application/pdf", data: "x", size: 1 }], "Summarize it");
+  const pdf = await processPdfDocuments([{ name: "empty.pdf", mimeType: "application/pdf", text: "", size: 1 }], "Summarize it");
   assert.equal(pdf.pdfReferences.length, 0);
   assert.match(pdf.extractedFindings, /empty|corrupted/i);
 });
 
 test("a valid PDF response reaches document evidence parsing", async () => {
   setGeminiClientForTesting(fakeClient(() => ({ text: "Finding.\n<<<REFERENCES_JSON\n[{\"id\":\"ref-1\",\"fileName\":\"paper.pdf\",\"sectionTitle\":\"Introduction\",\"pageNumber\":1,\"extractedFinding\":\"A supported finding\"}]\nREFERENCES_JSON>>>" })));
-  const pdf = await processPdfDocuments([{ name: "paper.pdf", mimeType: "application/pdf", data: "a".repeat(80), size: 80 }], "What does it say?");
+  const pdf = await processPdfDocuments([{ name: "paper.pdf", mimeType: "application/pdf", text: "[[PAGE 1]] A supported finding", size: 80 }], "What does it say?");
   assert.equal(pdf.pdfReferences[0]?.pageNumber, 1);
   assert.match(pdf.extractedFindings, /Finding/);
 });
 
 test("an empty PDF model response is reported as an extraction failure", async () => {
   setGeminiClientForTesting(fakeClient(() => ({ text: "" })));
-  const pdf = await processPdfDocuments([{ name: "scan.pdf", mimeType: "application/pdf", data: "a".repeat(80), size: 80 }], "Summarize it");
+  const pdf = await processPdfDocuments([{ name: "scan.pdf", mimeType: "application/pdf", text: "[[PAGE 1]] readable text", size: 80 }], "Summarize it");
   assert.match(pdf.processingError || "", /could not extract readable text/i);
   assert.equal(pdf.pdfReferences.length, 0);
 });
@@ -84,7 +84,7 @@ test("resume PDF analysis is instructed to preserve candidate facts without inve
     assert.match(prompt, /resume-refinement request/i);
     return { text: "Candidate experience extracted." };
   }));
-  const pdf = await processPdfDocuments([{ name: "resume.pdf", mimeType: "application/pdf", data: "a".repeat(80), size: 80 }], "Refine and make this ATS friendly resume");
+  const pdf = await processPdfDocuments([{ name: "resume.pdf", mimeType: "application/pdf", text: "[[PAGE 1]] Candidate history", size: 80 }], "Refine and make this ATS friendly resume");
   assert.match(pdf.extractedFindings, /Candidate experience/i);
   assert.equal(pdf.processingError, undefined);
 });
@@ -136,14 +136,14 @@ test("follow-up history is bounded before it reaches Gemini", async () => {
   assert.equal(answer, "History safely bounded.");
 });
 
-test("fallback skips duplicate model identifiers", async () => {
+test("permanent Gemini errors do not trigger model fallback", async () => {
   const models: string[] = [];
   setGeminiClientForTesting(fakeClient((request) => {
     models.push(request.model);
     throw new Error("400 invalid request");
   }));
   await assert.rejects(() => generateContentWithRetry({ contents: "test", timeoutMs: 500 }, 0));
-  assert.deepEqual(models, ["gemini-3.5-flash-lite", "gemini-3.5-flash"]);
+  assert.deepEqual(models, ["gemini-3.5-flash-lite"]);
 });
 
 test("a temporary Gemini 503 is retried", async () => {
